@@ -46,6 +46,8 @@ MIDDLEWARE = [
     'core.middleware.LicenseMiddleware',
 ]
 
+ADMIN_URL = 'admin/'
+
 ROOT_URLCONF = 'barbershop.urls'
 
 TEMPLATES = [
