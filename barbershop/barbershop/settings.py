@@ -134,11 +134,14 @@ REST_FRAMEWORK = {
 }
 
 # Configuración de CORS
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # True en desarrollo, False en producción
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = os.environ.get(
     'CORS_ALLOWED_ORIGINS',
     'http://localhost:3000'
 ).split(',')
+CORS_ALLOW_CREDENTIALS = True
+
+ADMIN_ENABLED = True
 
 # Configuración JWT
 from datetime import timedelta

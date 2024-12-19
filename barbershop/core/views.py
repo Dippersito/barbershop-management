@@ -223,3 +223,17 @@ class CustomTokenObtainPairView(TokenObtainPairView):
             )
         
         return response
+    
+from django.http import HttpResponse
+
+def test_view(request):
+    return HttpResponse("Test view working!")
+
+# En core/urls.py
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    # ... tus otras URLs ...
+    path('test/', views.test_view, name='test'),
+]
