@@ -1,0 +1,109 @@
+# core/templates/core/report.html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Reporte de Cortes</title>
+    <style>
+        @media print {
+            body {
+                width: 21cm;
+                height: 29.7cm;
+                margin: 30mm 45mm 30mm 45mm;
+            }
+        }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            border-bottom: 2px solid #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+        }
+        .totals {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        .print-button {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        @media print {
+            .print-button {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Reporte de Cortes</h1>
+        <p>Período: {{ start_date }} - {{ end_date }}</p>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Barbero</th>
+                <th>Método de Pago</th>
+                <th>Monto</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cut in haircuts %}
+            <tr>
+                <td>{{ cut.created_at|date:"d/m/Y H:i" }}</td>
+                <td>{{ cut.client_name|default:"Cliente Anónimo" }}</td>
+                <td>{{ cut.barber.name }}</td>
+                <td>{{ cut.get_payment_method_display }}</td>
+                <td>S/. {{ cut.amount }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="totals">
+        <h3>Resumen</h3>
+        <p>Total Efectivo: S/. {{ total_cash }}</p>
+        <p>Total Yape: S/. {{ total_yape }}</p>
+        <p>Total General: S/. {{ total }}</p>
+    </div>
+
+    <button onclick="window.print()" class="print-button">Imprimir Reporte</button>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            if(window.opener) {
+                window.opener.postMessage('reportLoaded', '*');
+            }
+        });
+    </script>
+</body>
+</html>
