@@ -255,46 +255,49 @@ class ReservationViewSet(viewsets.ModelViewSet):
 class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
         try:
-            # Primero hacemos el login normal
+            # Primero validamos las credenciales
             response = super().post(request, *args, **kwargs)
             
             if response.status_code == 200:
-                # Obtenemos el usuario de manera segura
+                # Obtenemos el usuario
                 username = request.data.get('username')
-                try:
-                    user = User.objects.get(username=username)
-                    
-                    # Verificamos si ya tiene una barbería
-                    barbershop = Barbershop.objects.filter(owner=user).first()
-                    
-                    if not barbershop:
-                        # Si no tiene barbería, creamos una con su licencia
-                        with transaction.atomic():
-                            # Creamos la licencia con fecha de expiración
-                            license = License.objects.create(
-                                is_active=True,
-                                expires_at=timezone.now() + timezone.timedelta(days=365)
-                            )
-                            
-                            # Creamos la barbería
-                            barbershop = Barbershop.objects.create(
-                                name=f'Barbería de {user.username}',
-                                owner=user,
-                                license=license
-                            )
-                except User.DoesNotExist:
-                    # Si no encontramos el usuario, igual permitimos el login
-                    pass
-                except Exception as e:
-                    # Log del error pero permitimos el login
-                    print(f"Error creando barbería: {str(e)}")
-                    
+                user = User.objects.get(username=username)
+                
+                # Buscamos la barbería del usuario
+                barbershop = Barbershop.objects.filter(owner=user).first()
+                
+                if not barbershop or not barbershop.license:
+                    return Response(
+                        {
+                            'error': 'No hay licencia válida para esta barbería',
+                            'show_support': True,
+                            'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+                        },
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                
+                # Verificar si la licencia es válida
+                if not barbershop.license.is_valid():
+                    return Response(
+                        {
+                            'error': 'La licencia ha expirado o no está activa',
+                            'show_support': True,
+                            'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+                        },
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+
             return response
             
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'Usuario no encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
         except Exception as e:
             print(f"Error en login: {str(e)}")
             return Response(
-                {'detail': str(e)},
+                {'detail': 'Error en el proceso de login'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
