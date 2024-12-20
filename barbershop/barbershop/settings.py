@@ -114,6 +114,7 @@ if os.environ.get('RAILWAY_ENVIRONMENT'):
         '127.0.0.1'
     ]
     CORS_ALLOWED_ORIGINS = [
+        'https://barbershop-frontend-wine.vercel.app',
         'https://barbershop-frontend.vercel.app',
         'http://localhost:3000'
     ]

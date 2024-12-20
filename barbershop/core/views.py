@@ -151,12 +151,18 @@ class HaircutViewSet(viewsets.ModelViewSet):
             f'{period}Stats': totals
         })
 
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer])
+    @action(detail=False, methods=['get'])
     def report(self, request):
         try:
             start_date = request.query_params.get('startDate')
             end_date = request.query_params.get('endDate')
             
+            if not start_date or not end_date:
+                return Response(
+                    {'error': 'Se requieren fechas de inicio y fin'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             # Obtener los cortes
             haircuts = self.get_queryset().filter(
                 created_at__date__range=[start_date, end_date]
@@ -176,8 +182,9 @@ class HaircutViewSet(viewsets.ModelViewSet):
                 'total_yape': total_yape,
             }
 
-            # Usar render directamente para la plantilla
+            # Renderizar el template
             return render(request, 'core/report.html', context)
+            
         except Exception as e:
             print(f"Error generating report: {str(e)}")  # Para debugging
             return Response(
