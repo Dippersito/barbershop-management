@@ -18,6 +18,7 @@ import io
 from django.shortcuts import render
 from rest_framework.decorators import action
 from rest_framework.renderers import TemplateHTMLRenderer
+from django.db import transaction
 
 
 # Vista para activar licencias
@@ -98,8 +99,13 @@ class BarberViewSet(viewsets.ModelViewSet):
         return Barber.objects.filter(barbershop__owner=self.request.user)
 
     def perform_create(self, serializer):
-        barbershop = Barbershop.objects.get(owner=self.request.user)
-        serializer.save(barbershop=barbershop)
+        try:
+            barbershop = Barbershop.objects.get(owner=self.request.user)
+            serializer.save(barbershop=barbershop)
+        except Barbershop.DoesNotExist:
+            raise serializers.ValidationError(
+                {"error": "No se encontró una barbería asociada a este usuario. Por favor, contacte al administrador."}
+            )
 
 # Vista para gestionar cortes de cabello
 class HaircutViewSet(viewsets.ModelViewSet):
@@ -227,26 +233,25 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         response = super().post(request, *args, **kwargs)
         
         if response.status_code == 200:
-            try:
-                # En lugar de get_or_create, buscamos una licencia específica
-                # Si hay múltiples, tomamos la más reciente
-                license = License.objects.filter(
-                    is_active=True,
-                    expires_at__gt=timezone.now()
-                ).order_by('-created_at').first()
+            with transaction.atomic():
+                # Obtener el usuario que acaba de iniciar sesión
+                user = self.user
 
-                if not license:
+                # Verificar si ya tiene una barbería
+                barbershop = Barbershop.objects.filter(owner=user).first()
+                if not barbershop:
+                    # Crear una nueva licencia
                     license = License.objects.create(
-                        expires_at=timezone.now() + timezone.timedelta(days=365),
-                        is_active=True
+                        is_active=True,
+                        expires_at=timezone.now() + timezone.timedelta(days=365)
                     )
-
-                # No asignamos machine_id aquí, eso se hace en la activación de licencia
-                
-            except Exception as e:
-                print(f"Error creating license: {str(e)}")
-                # Aún así devolvemos la respuesta exitosa
-                pass
+                    
+                    # Crear una nueva barbería
+                    barbershop = Barbershop.objects.create(
+                        name=f'Barbería de {user.username}',
+                        owner=user,
+                        license=license
+                    )
 
         return response
     
