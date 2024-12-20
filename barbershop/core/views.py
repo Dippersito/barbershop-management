@@ -31,10 +31,11 @@ class LicenseActivationView(APIView):
         machine_id = request.data.get('machine_id')
 
         if not license_key or not machine_id:
-            return Response(
-                {'error': 'Se requiere license_key y machine_id'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({
+                'error': 'Se requiere license_key y machine_id',
+                'show_support': True,
+                'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             # Verificar si ya existe una licencia activa para este machine_id
@@ -49,28 +50,30 @@ class LicenseActivationView(APIView):
                 if str(existing_license.key) == str(license_key):
                     return Response({'message': 'Esta licencia ya está activada para esta máquina'})
                 else:
-                    return Response(
-                        {'error': 'Esta máquina ya tiene una licencia activa diferente'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    return Response({
+                        'error': 'Esta máquina ya tiene una licencia activa diferente',
+                        'show_support': True,
+                        'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+                    }, status.HTTP_400_BAD_REQUEST)
 
-            # Buscar la licencia que intentan activar
             try:
                 license = License.objects.get(key=license_key)
 
                 # Verificar si la licencia está vencida
                 if license.expires_at < timezone.now():
-                    return Response(
-                        {'error': 'Esta licencia ha expirado'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    return Response({
+                        'error': 'Esta licencia ha expirado',
+                        'show_support': True,
+                        'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+                    }, status.HTTP_400_BAD_REQUEST)
 
                 # Verificar si la licencia ya está siendo usada en otra máquina
                 if license.machine_id and license.machine_id != machine_id:
-                    return Response(
-                        {'error': 'Esta licencia ya está en uso en otra máquina'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    return Response({
+                        'error': 'Esta licencia ya está en uso en otra máquina',
+                        'show_support': True,
+                        'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+                    }, status.HTTP_400_BAD_REQUEST)
 
                 # Activar la licencia para esta máquina
                 license.machine_id = machine_id
@@ -80,16 +83,18 @@ class LicenseActivationView(APIView):
                 return Response({'message': 'Licencia activada exitosamente'})
 
             except License.DoesNotExist:
-                return Response(
-                    {'error': 'Licencia no encontrada'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
+                return Response({
+                    'error': 'Licencia no encontrada',
+                    'show_support': True,
+                    'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+                }, status.HTTP_404_NOT_FOUND)
 
         except Exception as e:
-            return Response(
-                {'error': f'Error al activar la licencia: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({
+                'error': f'Error al activar la licencia: {str(e)}',
+                'show_support': True,
+                'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+            }, status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 # Vista para gestionar barberos
 class BarberViewSet(viewsets.ModelViewSet):
