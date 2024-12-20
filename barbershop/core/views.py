@@ -19,6 +19,7 @@ from django.shortcuts import render
 from rest_framework.decorators import action
 from rest_framework.renderers import TemplateHTMLRenderer
 from django.db import transaction
+from django.contrib.auth.models import User
 
 
 # Vista para activar licencias
@@ -230,30 +231,49 @@ class ReservationViewSet(viewsets.ModelViewSet):
     
 class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
-        
-        if response.status_code == 200:
-            with transaction.atomic():
-                # Obtener el usuario que acaba de iniciar sesión
-                user = self.user
-
-                # Verificar si ya tiene una barbería
-                barbershop = Barbershop.objects.filter(owner=user).first()
-                if not barbershop:
-                    # Crear una nueva licencia
-                    license = License.objects.create(
-                        is_active=True,
-                        expires_at=timezone.now() + timezone.timedelta(days=365)
-                    )
+        try:
+            # Primero hacemos el login normal
+            response = super().post(request, *args, **kwargs)
+            
+            if response.status_code == 200:
+                # Obtenemos el usuario de manera segura
+                username = request.data.get('username')
+                try:
+                    user = User.objects.get(username=username)
                     
-                    # Crear una nueva barbería
-                    barbershop = Barbershop.objects.create(
-                        name=f'Barbería de {user.username}',
-                        owner=user,
-                        license=license
-                    )
-
-        return response
+                    # Verificamos si ya tiene una barbería
+                    barbershop = Barbershop.objects.filter(owner=user).first()
+                    
+                    if not barbershop:
+                        # Si no tiene barbería, creamos una con su licencia
+                        with transaction.atomic():
+                            # Creamos la licencia con fecha de expiración
+                            license = License.objects.create(
+                                is_active=True,
+                                expires_at=timezone.now() + timezone.timedelta(days=365)
+                            )
+                            
+                            # Creamos la barbería
+                            barbershop = Barbershop.objects.create(
+                                name=f'Barbería de {user.username}',
+                                owner=user,
+                                license=license
+                            )
+                except User.DoesNotExist:
+                    # Si no encontramos el usuario, igual permitimos el login
+                    pass
+                except Exception as e:
+                    # Log del error pero permitimos el login
+                    print(f"Error creando barbería: {str(e)}")
+                    
+            return response
+            
+        except Exception as e:
+            print(f"Error en login: {str(e)}")
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
 from django.http import HttpResponse
 
