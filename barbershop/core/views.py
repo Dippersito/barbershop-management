@@ -29,33 +29,64 @@ class LicenseActivationView(APIView):
         machine_id = request.data.get('machine_id')
 
         if not license_key or not machine_id:
-            return Response({'error': 'Se requiere license_key y machine_id'}, 
-                          status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'Se requiere license_key y machine_id'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
-            license = License.objects.get(key=license_key)
-            
-            # Si la licencia ya está activada para esta máquina
-            if license.machine_id == machine_id:
-                return Response({'message': 'Licencia ya activada para esta máquina'})
-                
-            # Si la licencia está activada en otra máquina
-            if license.machine_id and license.machine_id != machine_id:
+            # Verificar si ya existe una licencia activa para este machine_id
+            existing_license = License.objects.filter(
+                machine_id=machine_id,
+                is_active=True,
+                expires_at__gt=timezone.now()
+            ).first()
+
+            if existing_license:
+                # Si la licencia existente es la misma que están intentando activar
+                if str(existing_license.key) == str(license_key):
+                    return Response({'message': 'Esta licencia ya está activada para esta máquina'})
+                else:
+                    return Response(
+                        {'error': 'Esta máquina ya tiene una licencia activa diferente'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Buscar la licencia que intentan activar
+            try:
+                license = License.objects.get(key=license_key)
+
+                # Verificar si la licencia está vencida
+                if license.expires_at < timezone.now():
+                    return Response(
+                        {'error': 'Esta licencia ha expirado'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                # Verificar si la licencia ya está siendo usada en otra máquina
+                if license.machine_id and license.machine_id != machine_id:
+                    return Response(
+                        {'error': 'Esta licencia ya está en uso en otra máquina'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                # Activar la licencia para esta máquina
+                license.machine_id = machine_id
+                license.activated_at = timezone.now()
+                license.save()
+
+                return Response({'message': 'Licencia activada exitosamente'})
+
+            except License.DoesNotExist:
                 return Response(
-                    {'error': 'Esta licencia ya está activada en otra máquina'},
-                    status=status.HTTP_400_BAD_REQUEST
+                    {'error': 'Licencia no encontrada'},
+                    status=status.HTTP_404_NOT_FOUND
                 )
 
-            # Si la licencia no está activada o es la misma máquina
-            license.machine_id = machine_id
-            license.save()
-            
-            return Response({'message': 'Licencia activada exitosamente'})
-
-        except License.DoesNotExist:
+        except Exception as e:
             return Response(
-                {'error': 'Licencia no encontrada'},
-                status=status.HTTP_404_NOT_FOUND
+                {'error': f'Error al activar la licencia: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
 # Vista para gestionar barberos
@@ -196,32 +227,27 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         response = super().post(request, *args, **kwargs)
         
         if response.status_code == 200:
-            # Obtener el usuario del token
-            token_data = response.data
-            from rest_framework_simplejwt.tokens import AccessToken
-            token = AccessToken(token_data['access'])
-            user_id = token.payload.get('user_id')
-            
-            from django.contrib.auth.models import User
-            user = User.objects.get(id=user_id)
-            
-            # Crear licencia por defecto si no existe
-            license, created = License.objects.get_or_create(
-                defaults={
-                    'is_active': True,
-                    'expires_at': timezone.now() + timezone.timedelta(days=365)
-                }
-            )
-            
-            # Crear barbería si no existe para el usuario
-            barbershop, created = Barbershop.objects.get_or_create(
-                owner=user,
-                defaults={
-                    'name': f'Barbería de {user.username}',
-                    'license': license
-                }
-            )
-        
+            try:
+                # En lugar de get_or_create, buscamos una licencia específica
+                # Si hay múltiples, tomamos la más reciente
+                license = License.objects.filter(
+                    is_active=True,
+                    expires_at__gt=timezone.now()
+                ).order_by('-created_at').first()
+
+                if not license:
+                    license = License.objects.create(
+                        expires_at=timezone.now() + timezone.timedelta(days=365),
+                        is_active=True
+                    )
+
+                # No asignamos machine_id aquí, eso se hace en la activación de licencia
+                
+            except Exception as e:
+                print(f"Error creating license: {str(e)}")
+                # Aún así devolvemos la respuesta exitosa
+                pass
+
         return response
     
 from django.http import HttpResponse
