@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.utils import timezone
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Q
 from .models import License, Barbershop, Barber, Haircut, Reservation
 from .serializers import (
     LicenseSerializer, BarbershopSerializer, BarberSerializer,
@@ -15,6 +15,7 @@ from .serializers import (
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.http import HttpResponse
 import io
+import traceback
 from django.shortcuts import render
 from rest_framework.decorators import action
 from rest_framework.renderers import TemplateHTMLRenderer
@@ -153,42 +154,52 @@ class HaircutViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def report(self, request):
+        print("Recibiendo solicitud de reporte")
+        print(f"Usuario autenticado: {request.user}")
+        print(f"Headers: {request.headers}")
+        
         try:
+            if not request.user.is_authenticated:
+                print("Usuario no autenticado")
+                return Response(
+                    {'error': 'No autorizado'}, 
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
             start_date = request.query_params.get('startDate')
             end_date = request.query_params.get('endDate')
             
-            if not start_date or not end_date:
-                return Response(
-                    {'error': 'Se requieren fechas de inicio y fin'}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Obtener los cortes
+            print(f"Fechas: {start_date} - {end_date}")
+            
             haircuts = self.get_queryset().filter(
+                barbershop__owner=request.user,
                 created_at__date__range=[start_date, end_date]
             ).order_by('created_at')
+            
+            print(f"Cortes encontrados: {haircuts.count()}")
 
-            # Calcular totales
-            total = sum(h.amount for h in haircuts)
-            total_cash = sum(h.amount for h in haircuts if h.payment_method == 'CASH')
-            total_yape = sum(h.amount for h in haircuts if h.payment_method == 'YAPE')
+            total = haircuts.aggregate(
+                total=Sum('amount'),
+                total_cash=Sum('amount', filter=Q(payment_method='CASH')),
+                total_yape=Sum('amount', filter=Q(payment_method='YAPE'))
+            )
 
             context = {
                 'haircuts': haircuts,
                 'start_date': start_date,
                 'end_date': end_date,
-                'total': total,
-                'total_cash': total_cash,
-                'total_yape': total_yape,
+                'total': total['total'] or 0,
+                'total_cash': total['total_cash'] or 0,
+                'total_yape': total['total_yape'] or 0,
             }
 
-            # Renderizar el template
             return render(request, 'core/report.html', context)
             
         except Exception as e:
-            print(f"Error generating report: {str(e)}")  # Para debugging
+            print(f"Error en reporte: {str(e)}")
+            print(f"Traceback: {traceback.format_exc()}")
             return Response(
-                {'error': 'Error generando el reporte'},
+                {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
