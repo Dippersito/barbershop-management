@@ -24,3 +24,5 @@ webencodings==0.5.1
 whitenoise==6.6.0
 zopfli==0.2.3.post1
 waitress==3.0.2
+gunicorn==21.2.0
+whitenoise==6.6.0
