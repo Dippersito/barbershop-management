@@ -263,29 +263,44 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 username = request.data.get('username')
                 user = User.objects.get(username=username)
                 
-                # Buscamos la barbería del usuario
+                # Obtener machine_id del header
+                machine_id = request.headers.get('X-Machine-ID')
+                if not machine_id:
+                    return Response(
+                        {'error': 'Machine ID no proporcionado'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                # Buscar la licencia activa para este machine_id
+                license = License.objects.filter(
+                    machine_id=machine_id,
+                    is_active=True,
+                    expires_at__gt=timezone.now()
+                ).first()
+
+                if not license:
+                    return Response(
+                        {
+                            'error': 'No hay licencia válida para esta máquina',
+                            'show_support': True,
+                            'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+                        },
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+
+                # Buscar o crear la barbería para este usuario
                 barbershop = Barbershop.objects.filter(owner=user).first()
-                
-                if not barbershop or not barbershop.license:
-                    return Response(
-                        {
-                            'error': 'No hay licencia válida para esta barbería',
-                            'show_support': True,
-                            'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
-                        },
-                        status=status.HTTP_403_FORBIDDEN
+                if not barbershop:
+                    # Si no existe la barbería, la creamos con la licencia
+                    barbershop = Barbershop.objects.create(
+                        name=f'Barbería de {user.username}',
+                        owner=user,
+                        license=license
                     )
-                
-                # Verificar si la licencia es válida
-                if not barbershop.license.is_valid():
-                    return Response(
-                        {
-                            'error': 'La licencia ha expirado o no está activa',
-                            'show_support': True,
-                            'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
-                        },
-                        status=status.HTTP_403_FORBIDDEN
-                    )
+                else:
+                    # Si existe la barbería, actualizamos su licencia
+                    barbershop.license = license
+                    barbershop.save()
 
             return response
             
