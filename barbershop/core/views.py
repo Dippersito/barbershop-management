@@ -255,23 +255,25 @@ class ReservationViewSet(viewsets.ModelViewSet):
 class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
         try:
-            # Primero validamos las credenciales
+            # Verificar machine_id
+            machine_id = request.headers.get('X-Machine-ID')
+            if not machine_id:
+                return Response(
+                    {
+                        'error': 'Se requiere ID de máquina',
+                        'detail': 'Por favor, active una licencia primero'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Intentar login
             response = super().post(request, *args, **kwargs)
             
             if response.status_code == 200:
-                # Obtenemos el usuario
                 username = request.data.get('username')
                 user = User.objects.get(username=username)
                 
-                # Obtener machine_id del header
-                machine_id = request.headers.get('X-Machine-ID')
-                if not machine_id:
-                    return Response(
-                        {'error': 'Machine ID no proporcionado'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-
-                # Buscar la licencia activa para este machine_id
+                # Verificar licencia activa
                 license = License.objects.filter(
                     machine_id=machine_id,
                     is_active=True,
@@ -282,40 +284,35 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                     return Response(
                         {
                             'error': 'No hay licencia válida para esta máquina',
-                            'show_support': True,
-                            'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+                            'detail': 'Contacte al administrador para activar una licencia'
                         },
                         status=status.HTTP_403_FORBIDDEN
                     )
 
-                # Buscar o crear la barbería para este usuario
+                # Actualizar o crear barbería
                 barbershop = Barbershop.objects.filter(owner=user).first()
-                if not barbershop:
-                    # Si no existe la barbería, la creamos con la licencia
-                    barbershop = Barbershop.objects.create(
+                if barbershop:
+                    barbershop.license = license
+                    barbershop.save()
+                else:
+                    Barbershop.objects.create(
                         name=f'Barbería de {user.username}',
                         owner=user,
                         license=license
                     )
-                else:
-                    # Si existe la barbería, actualizamos su licencia
-                    barbershop.license = license
-                    barbershop.save()
 
-            return response
-            
-        except User.DoesNotExist:
-            return Response(
-                {'error': 'Usuario no encontrado'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+                return response
+
         except Exception as e:
-            print(f"Error en login: {str(e)}")
+            print(f"Login error: {str(e)}")
             return Response(
-                {'detail': 'Error en el proceso de login'},
+                {
+                    'error': 'Error en el proceso de login',
+                    'detail': str(e)
+                },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-    
+        
 from django.http import HttpResponse
 
 def test_view(request):
