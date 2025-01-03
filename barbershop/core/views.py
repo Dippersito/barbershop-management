@@ -28,18 +28,18 @@ class LicenseActivationView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        license_key = request.data.get('license_key')
-        machine_id = request.data.get('machine_id')
-
-        if not license_key or not machine_id:
-            return Response({
-                'error': 'Se requiere license_key y machine_id',
-                'show_support': True,
-                'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
         try:
-            # Verificar si ya existe una licencia activa para este machine_id
+            license_key = request.data.get('license_key')
+            machine_id = request.data.get('machine_id')
+            print(f"License activation attempt - Key: {license_key}, Machine ID: {machine_id}")
+
+            if not all([license_key, machine_id]):
+                return Response({
+                    'error': 'Se requiere license_key y machine_id',
+                    'show_support': True,
+                    'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             existing_license = License.objects.filter(
                 machine_id=machine_id,
                 is_active=True,
@@ -47,55 +47,52 @@ class LicenseActivationView(APIView):
             ).first()
 
             if existing_license:
-                # Si la licencia existente es la misma que están intentando activar
                 if str(existing_license.key) == str(license_key):
-                    return Response({'message': 'Esta licencia ya está activada para esta máquina'})
-                else:
                     return Response({
-                        'error': 'Esta máquina ya tiene una licencia activa diferente',
-                        'show_support': True,
-                        'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
-                    }, status.HTTP_400_BAD_REQUEST)
+                        'message': 'Esta licencia ya está activada para esta máquina',
+                        'status': 'active'
+                    })
+                return Response({
+                    'error': 'Esta máquina ya tiene una licencia activa diferente',
+                    'show_support': True,
+                    'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+                }, status=status.HTTP_400_BAD_REQUEST)
 
-            try:
-                license = License.objects.get(key=license_key)
-
-                # Verificar si la licencia está vencida
-                if license.expires_at < timezone.now():
-                    return Response({
-                        'error': 'Esta licencia ha expirado',
-                        'show_support': True,
-                        'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
-                    }, status.HTTP_400_BAD_REQUEST)
-
-                # Verificar si la licencia ya está siendo usada en otra máquina
-                if license.machine_id and license.machine_id != machine_id:
-                    return Response({
-                        'error': 'Esta licencia ya está en uso en otra máquina',
-                        'show_support': True,
-                        'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
-                    }, status.HTTP_400_BAD_REQUEST)
-
-                # Activar la licencia para esta máquina
-                license.machine_id = machine_id
-                license.activated_at = timezone.now()
-                license.save()
-
-                return Response({'message': 'Licencia activada exitosamente'})
-
-            except License.DoesNotExist:
+            license = License.objects.filter(key=license_key).first()
+            if not license:
                 return Response({
                     'error': 'Licencia no encontrada',
                     'show_support': True,
                     'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
-                }, status.HTTP_404_NOT_FOUND)
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            if license.expires_at < timezone.now():
+                return Response({
+                    'error': 'Esta licencia ha expirado',
+                    'show_support': True,
+                    'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            if license.machine_id and license.machine_id != machine_id:
+                return Response({
+                    'error': 'Esta licencia ya está en uso en otra máquina',
+                    'show_support': True,
+                    'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            license.machine_id = machine_id
+            license.activated_at = timezone.now()
+            license.save()
+
+            return Response({'message': 'Licencia activada exitosamente', 'status': 'activated'})
 
         except Exception as e:
+            print(f"License activation error: {str(e)}")
             return Response({
-                'error': f'Error al activar la licencia: {str(e)}',
+                'error': 'Error al activar la licencia',
                 'show_support': True,
                 'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
-            }, status.HTTP_500_INTERNAL_SERVER_ERROR)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 # Vista para gestionar barberos
 class BarberViewSet(viewsets.ModelViewSet):
@@ -255,25 +252,20 @@ class ReservationViewSet(viewsets.ModelViewSet):
 class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
         try:
-            # Verificar machine_id
             machine_id = request.headers.get('X-Machine-ID')
-            if not machine_id:
-                return Response(
-                    {
-                        'error': 'Se requiere ID de máquina',
-                        'detail': 'Por favor, active una licencia primero'
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            print(f"Login attempt - User: {request.data.get('username')}, Machine ID: {machine_id}")
 
-            # Intentar login
+            if not machine_id:
+                return Response({
+                    'error': 'Se requiere ID de máquina',
+                    'detail': 'Por favor, active una licencia primero'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             response = super().post(request, *args, **kwargs)
             
             if response.status_code == 200:
-                username = request.data.get('username')
-                user = User.objects.get(username=username)
+                user = User.objects.get(username=request.data.get('username'))
                 
-                # Verificar licencia activa
                 license = License.objects.filter(
                     machine_id=machine_id,
                     is_active=True,
@@ -281,48 +273,34 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 ).first()
 
                 if not license:
-                    return Response(
-                        {
-                            'error': 'No hay licencia válida para esta máquina',
-                            'detail': 'Contacte al administrador para activar una licencia'
-                        },
-                        status=status.HTTP_403_FORBIDDEN
-                    )
+                    return Response({
+                        'error': 'No hay licencia válida para esta máquina',
+                        'show_support': True,
+                        'support_message': 'Para soporte o validar su licencia, contactar con Stephano Cornejo Córdova al 940183490'
+                    }, status=status.HTTP_403_FORBIDDEN)
 
-                # Actualizar o crear barbería
-                barbershop = Barbershop.objects.filter(owner=user).first()
-                if barbershop:
-                    barbershop.license = license
-                    barbershop.save()
-                else:
-                    Barbershop.objects.create(
-                        name=f'Barbería de {user.username}',
-                        owner=user,
-                        license=license
-                    )
+                with transaction.atomic():
+                    barbershop = Barbershop.objects.filter(owner=user).first()
+                    if barbershop:
+                        barbershop.license = license
+                        barbershop.save()
+                    else:
+                        Barbershop.objects.create(
+                            name=f'Barbería de {user.username}',
+                            owner=user,
+                            license=license
+                        )
 
                 return response
 
+        except User.DoesNotExist:
+            return Response({
+                'error': 'Usuario no encontrado'
+            }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             print(f"Login error: {str(e)}")
-            return Response(
-                {
-                    'error': 'Error en el proceso de login',
-                    'detail': str(e)
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({
+                'error': 'Error en el proceso de login',
+                'detail': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-from django.http import HttpResponse
-
-def test_view(request):
-    return HttpResponse("Test view working!")
-
-# En core/urls.py
-from django.urls import path
-from . import views
-
-urlpatterns = [
-    # ... tus otras URLs ...
-    path('test/', views.test_view, name='test'),
-]
